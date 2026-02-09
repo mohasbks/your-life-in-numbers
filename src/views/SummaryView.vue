@@ -142,7 +142,7 @@ function barWidth(catId: string) {
 
 // Categories that have what-if savings
 const whatIfCategories = computed(() =>
-  store.selectedCategories.filter(c => store.whatIfSavings[c.id] > 0)
+  store.selectedCategories.filter(c => (store.whatIfSavings[c.id] ?? 0) > 0)
 )
 
 // Top saved years for comparison

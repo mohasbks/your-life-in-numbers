@@ -137,19 +137,24 @@ function initParticles() {
     // Draw connections between close particles
     for (let i = 0; i < particles.length; i++) {
       for (let j = i + 1; j < particles.length; j++) {
-        const dx = particles[i].x - particles[j].x
-        const dy = particles[i].y - particles[j].y
+        const p1 = particles[i]
+        const p2 = particles[j]
+        if (!p1 || !p2) continue
+        
+        const dx = p1.x - p2.x
+        const dy = p1.y - p2.y
         const dist = Math.sqrt(dx * dx + dy * dy)
 
         if (dist < 120) {
           ctx!.beginPath()
-          ctx!.moveTo(particles[i].x, particles[i].y)
-          ctx!.lineTo(particles[j].x, particles[j].y)
+          ctx!.moveTo(p1.x, p1.y)
+          ctx!.lineTo(p2.x, p2.y)
           ctx!.strokeStyle = `rgba(74, 222, 128, ${0.05 * (1 - dist / 120)})`
           ctx!.lineWidth = 0.5
           ctx!.stroke()
         }
       }
+
     }
 
     animationId = requestAnimationFrame(animate)

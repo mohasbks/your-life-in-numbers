@@ -50,7 +50,7 @@
         </div>
 
         <!-- Quote -->
-        <div class="result__quote" v-if="showQuote">
+        <div class="result__quote" v-if="showQuote && quote">
           <p class="result__quote-text">"{{ quote.text }}"</p>
           <p class="result__quote-author">— {{ quote.author }}</p>
         </div>

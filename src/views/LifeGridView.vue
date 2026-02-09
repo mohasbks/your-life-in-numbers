@@ -81,7 +81,6 @@ const revealedDots = ref(0)
 
 // Show a subset for performance (each dot = ~4 weeks = 1 month)
 const monthsInLife = computed(() => store.lifespan * 12)
-const monthsLived = computed(() => store.userAge * 12)
 const displayWeeks = computed(() => monthsInLife.value)
 
 const livedPercent = computed(() =>
