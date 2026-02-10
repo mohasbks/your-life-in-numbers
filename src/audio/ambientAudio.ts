@@ -1,8 +1,13 @@
 /**
  * Ambient Audio System
  * Generates calm ambient music procedurally using Web Audio API
- * No external files needed — everything is synthesized
+ * iOS Safari compatible — all unlock steps are synchronous inside user gesture
  */
+
+// iOS Safari fallback
+const AudioCtx = typeof window !== 'undefined'
+    ? (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)
+    : null
 
 class AmbientAudio {
     private ctx: AudioContext | null = null
@@ -10,7 +15,6 @@ class AmbientAudio {
     private isPlaying = false
     private oscillators: OscillatorNode[] = []
     private intervals: number[] = []
-    private unlocked = false
 
     // Chord progressions (frequencies) for ambient feel
     private readonly chords = [
@@ -25,55 +29,55 @@ class AmbientAudio {
     private currentChordIndex = 0
 
     /**
-     * MUST be called synchronously inside a user gesture (click/touch)
-     * iOS Safari requires AudioContext creation + resume in the same call stack
+     * Call this DIRECTLY from a click/touch handler — no async, no await, no setTimeout
+     * iOS Safari requires everything in the same synchronous call stack as the user gesture
      */
-    private initAndUnlock() {
+    start() {
+        if (this.isPlaying) return
+        if (!AudioCtx) return
+
+        // Step 1: Create context synchronously in user gesture
         if (!this.ctx) {
-            // iOS Safari uses webkitAudioContext
-            const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
             this.ctx = new AudioCtx()
             this.masterGain = this.ctx.createGain()
             this.masterGain.gain.value = 0
             this.masterGain.connect(this.ctx.destination)
         }
 
-        // iOS unlock trick: play a silent buffer to "unlock" the audio context
-        if (!this.unlocked && this.ctx) {
-            const buffer = this.ctx.createBuffer(1, 1, 22050)
-            const source = this.ctx.createBufferSource()
-            source.buffer = buffer
-            source.connect(this.ctx.destination)
-            source.start(0)
+        if (!this.masterGain) return
 
-            // Also resume — this MUST happen in the user gesture call stack
-            if (this.ctx.state === 'suspended') {
-                this.ctx.resume()
-            }
-            this.unlocked = true
-        }
-    }
-
-    async start() {
-        if (this.isPlaying) return
-
-        // Init + unlock synchronously (critical for iOS)
-        this.initAndUnlock()
-        if (!this.ctx || !this.masterGain) return
-
-        // Double-check resume (for non-iOS browsers that are async)
+        // Step 2: Resume synchronously — don't await!
+        // On iOS, .resume() returns a promise but the unlock happens synchronously
         if (this.ctx.state === 'suspended') {
-            await this.ctx.resume()
+            this.ctx.resume()
         }
+
+        // Step 3: Play a silent buffer to fully unlock iOS audio
+        // This is the iOS "unlock" trick — must happen in user gesture call stack
+        const silentBuffer = this.ctx.createBuffer(1, 1, 22050)
+        const silentSource = this.ctx.createBufferSource()
+        silentSource.buffer = silentBuffer
+        silentSource.connect(this.ctx.destination)
+        silentSource.start(0)
+
+        // Step 4: Also create and start a real oscillator immediately
+        // iOS needs an actual audio node started in the gesture, not just later
+        const kickOsc = this.ctx.createOscillator()
+        const kickGain = this.ctx.createGain()
+        kickOsc.frequency.value = 1 // inaudible
+        kickGain.gain.value = 0.001 // nearly silent
+        kickOsc.connect(kickGain)
+        kickGain.connect(this.masterGain)
+        kickOsc.start(0)
+        kickOsc.stop(this.ctx.currentTime + 0.1)
 
         this.isPlaying = true
 
-        // Fade in master volume
+        // Step 5: Now fade in and start layers (these can be async since context is unlocked)
         this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime)
         this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime)
         this.masterGain.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + 3)
 
-        // Start ambient layers
         this.playDrone()
         this.playPad()
         this.startChimeLoop()
@@ -84,14 +88,15 @@ class AmbientAudio {
 
         // Fade out
         this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime)
+        this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, this.ctx.currentTime)
         this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2)
 
         setTimeout(() => {
             this.oscillators.forEach(osc => {
-                try { osc.stop() } catch { }
+                try { osc.stop() } catch (_e) { /* already stopped */ }
             })
             this.oscillators = []
-            this.intervals.forEach(id => clearInterval(id))
+            this.intervals.forEach(id => clearTimeout(id))
             this.intervals = []
             this.isPlaying = false
         }, 2500)
@@ -100,7 +105,6 @@ class AmbientAudio {
     private playDrone() {
         if (!this.ctx || !this.masterGain) return
 
-        // Deep low drone
         const osc = this.ctx.createOscillator()
         const gain = this.ctx.createGain()
         const filter = this.ctx.createBiquadFilter()
@@ -109,7 +113,6 @@ class AmbientAudio {
         osc.frequency.value = 65.41 // C2
         filter.type = 'lowpass'
         filter.frequency.value = 200
-
         gain.gain.value = 0.3
 
         osc.connect(filter)
@@ -133,7 +136,6 @@ class AmbientAudio {
     private playPad() {
         if (!this.ctx || !this.masterGain) return
 
-        // Evolving pad sound
         const playChord = () => {
             if (!this.ctx || !this.masterGain || !this.isPlaying) return
 
@@ -147,13 +149,12 @@ class AmbientAudio {
                 const filter = this.ctx!.createBiquadFilter()
 
                 osc.type = 'sine'
-                osc.frequency.value = freq * (i < 2 ? 0.5 : 1) // Lower octave for bass notes
+                osc.frequency.value = freq * (i < 2 ? 0.5 : 1)
 
                 filter.type = 'lowpass'
                 filter.frequency.value = 800
                 filter.Q.value = 1
 
-                // Envelope: slow fade in and out
                 const now = this.ctx!.currentTime
                 gain.gain.setValueAtTime(0, now)
                 gain.gain.linearRampToValueAtTime(0.06, now + 3)
@@ -177,8 +178,7 @@ class AmbientAudio {
     private startChimeLoop() {
         if (!this.ctx || !this.masterGain) return
 
-        // Occasional gentle chime notes
-        const chimeNotes = [523.25, 659.25, 783.99, 1046.50, 1318.51] // C5, E5, G5, C6, E6
+        const chimeNotes = [523.25, 659.25, 783.99, 1046.50, 1318.51]
 
         const playChime = () => {
             if (!this.ctx || !this.masterGain || !this.isPlaying) return
@@ -207,7 +207,6 @@ class AmbientAudio {
             osc.stop(now + 4)
         }
 
-        // Random chimes every 3-8 seconds
         const scheduleNext = () => {
             if (!this.isPlaying) return
             const delay = 3000 + Math.random() * 5000
@@ -218,14 +217,13 @@ class AmbientAudio {
             this.intervals.push(id)
         }
 
-        // Start after 2 seconds
         setTimeout(() => {
             playChime()
             scheduleNext()
         }, 2000)
     }
 
-    // Play a single soft tick sound (for interactions)
+    // Interaction sounds — only play if already unlocked
     playTick() {
         if (!this.ctx || !this.masterGain || !this.isPlaying) return
 
@@ -246,7 +244,6 @@ class AmbientAudio {
         osc.stop(now + 0.15)
     }
 
-    // Play a soft transition whoosh
     playTransition() {
         if (!this.ctx || !this.masterGain || !this.isPlaying) return
 
@@ -274,11 +271,10 @@ class AmbientAudio {
         osc.stop(now + 1.5)
     }
 
-    // Play reveal sound (for result numbers)
     playReveal() {
         if (!this.ctx || !this.masterGain || !this.isPlaying) return
 
-        const notes = [261.63, 329.63, 392.00] // C E G ascending
+        const notes = [261.63, 329.63, 392.00]
 
         notes.forEach((freq, i) => {
             const osc = this.ctx!.createOscillator()
