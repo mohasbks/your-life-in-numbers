@@ -10,6 +10,7 @@ class AmbientAudio {
     private isPlaying = false
     private oscillators: OscillatorNode[] = []
     private intervals: number[] = []
+    private unlocked = false
 
     // Chord progressions (frequencies) for ambient feel
     private readonly chords = [
@@ -23,20 +24,44 @@ class AmbientAudio {
 
     private currentChordIndex = 0
 
-    init() {
-        if (this.ctx) return
-        this.ctx = new AudioContext()
-        this.masterGain = this.ctx.createGain()
-        this.masterGain.gain.value = 0
-        this.masterGain.connect(this.ctx.destination)
+    /**
+     * MUST be called synchronously inside a user gesture (click/touch)
+     * iOS Safari requires AudioContext creation + resume in the same call stack
+     */
+    private initAndUnlock() {
+        if (!this.ctx) {
+            // iOS Safari uses webkitAudioContext
+            const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+            this.ctx = new AudioCtx()
+            this.masterGain = this.ctx.createGain()
+            this.masterGain.gain.value = 0
+            this.masterGain.connect(this.ctx.destination)
+        }
+
+        // iOS unlock trick: play a silent buffer to "unlock" the audio context
+        if (!this.unlocked && this.ctx) {
+            const buffer = this.ctx.createBuffer(1, 1, 22050)
+            const source = this.ctx.createBufferSource()
+            source.buffer = buffer
+            source.connect(this.ctx.destination)
+            source.start(0)
+
+            // Also resume — this MUST happen in the user gesture call stack
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume()
+            }
+            this.unlocked = true
+        }
     }
 
     async start() {
         if (this.isPlaying) return
 
-        this.init()
+        // Init + unlock synchronously (critical for iOS)
+        this.initAndUnlock()
         if (!this.ctx || !this.masterGain) return
 
+        // Double-check resume (for non-iOS browsers that are async)
         if (this.ctx.state === 'suspended') {
             await this.ctx.resume()
         }
