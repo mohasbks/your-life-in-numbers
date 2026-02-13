@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLifeStore } from '../stores/lifeStore'
 import { ambientAudio } from '../audio/ambientAudio'
@@ -119,6 +119,10 @@ onMounted(() => {
   initCanvas()
   setTimeout(() => { isVisible.value = true }, 200)
   nextTick(() => { ageInput.value?.focus() })
+})
+
+onUnmounted(() => {
+  if (animFrameId) cancelAnimationFrame(animFrameId)
 })
 </script>
 
