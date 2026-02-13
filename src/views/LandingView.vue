@@ -35,36 +35,12 @@
         </p>
       </div>
 
-      <div class="landing__age" v-if="showAge">
-        <label class="landing__age-label" for="age-input">I am</label>
-        <div class="landing__age-row">
-          <input
-            id="age-input"
-            type="number"
-            class="landing__age-input"
-            v-model.number="store.userAge"
-            min="1"
-            max="100"
-            placeholder="25"
-          />
-          <span class="landing__age-suffix">years old</span>
-        </div>
-      </div>
-
       <button
         class="btn-primary landing__cta"
         :class="{ 'is-visible': showButton }"
         @click="start"
       >
         Start
-      </button>
-
-      <button
-        class="landing__age-toggle"
-        @click="showAge = !showAge"
-        :class="{ 'is-visible': showButton }"
-      >
-        {{ showAge ? 'Hide age' : 'Enter your age (optional)' }}
       </button>
     </div>
 
@@ -92,7 +68,6 @@ const ringVisible = ref(false)
 const showLine1 = ref(false)
 const showLine2 = ref(false)
 const showButton = ref(false)
-const showAge = ref(false)
 
 const line1Text = 'Be honest...'
 const line2Text = 'where is your life going?'
@@ -341,7 +316,7 @@ function enter() {
 
 function start() {
   if (store.audioEnabled) ambientAudio.playTick()
-  router.push('/categories')
+  router.push('/age')
 }
 
 onMounted(() => {

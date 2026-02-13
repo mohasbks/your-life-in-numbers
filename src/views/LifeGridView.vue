@@ -6,35 +6,51 @@
       <div class="lifegrid__header">
         <h2 class="lifegrid__title">Your life in weeks.</h2>
         <p class="lifegrid__subtitle">
-          Each dot is one week. You have {{ store.totalWeeksInLife.toLocaleString() }} of them.
+          Each square is one week. You have <strong>{{ totalWeeks.toLocaleString() }}</strong> in total.
         </p>
+      </div>
+
+      <!-- Stats row -->
+      <div class="lifegrid__stats">
+        <div class="lifegrid__stat-box">
+          <p class="lifegrid__stat-num lifegrid__stat-num--lived">{{ weeksLived.toLocaleString() }}</p>
+          <p class="lifegrid__stat-desc">weeks lived</p>
+        </div>
+        <div class="lifegrid__stat-box">
+          <p class="lifegrid__stat-num lifegrid__stat-num--remaining">{{ weeksRemaining.toLocaleString() }}</p>
+          <p class="lifegrid__stat-desc">weeks remaining</p>
+        </div>
+        <div class="lifegrid__stat-box">
+          <p class="lifegrid__stat-num lifegrid__stat-num--pct">{{ livedPercent }}%</p>
+          <p class="lifegrid__stat-desc">of life passed</p>
+        </div>
       </div>
 
       <!-- Legend -->
       <div class="lifegrid__legend">
         <div class="lifegrid__legend-item">
-          <span class="lifegrid__legend-dot lifegrid__legend-dot--lived"></span>
-          <span>Weeks lived ({{ store.weeksLived.toLocaleString() }})</span>
+          <span class="lifegrid__legend-sq lifegrid__legend-sq--lived"></span>
+          <span>Weeks lived</span>
         </div>
         <div class="lifegrid__legend-item">
-          <span class="lifegrid__legend-dot lifegrid__legend-dot--remaining"></span>
-          <span>Weeks remaining ({{ store.weeksRemaining.toLocaleString() }})</span>
+          <span class="lifegrid__legend-sq lifegrid__legend-sq--remaining"></span>
+          <span>Weeks remaining</span>
         </div>
       </div>
 
-      <!-- Grid -->
+      <!-- Grid — 52 columns (weeks per year), lifespan rows (years) -->
       <div class="lifegrid__grid-wrapper">
-        <div class="lifegrid__grid">
+        <div class="lifegrid__year-labels">
+          <span v-for="y in yearLabels" :key="y" class="lifegrid__year-label">{{ y }}</span>
+        </div>
+        <div class="lifegrid__grid" :style="{ gridTemplateColumns: 'repeat(52, 1fr)' }">
           <div
-            v-for="i in displayWeeks"
+            v-for="i in totalWeeks"
             :key="i"
-            class="lifegrid__dot"
+            class="lifegrid__sq"
             :class="{
-              'is-lived': i <= store.weeksLived,
-              'is-revealed': revealedDots >= i,
-            }"
-            :style="{
-              transitionDelay: `${Math.min(i * 0.2, 800)}ms`,
+              'is-lived': i <= weeksLived,
+              'is-revealed': revealedCount >= i,
             }"
           ></div>
         </div>
@@ -48,19 +64,22 @@
       </div>
 
       <!-- Emotional stat -->
-      <div class="lifegrid__stat" :class="{ 'is-visible': showStat }">
-        <p class="lifegrid__stat-value">{{ livedPercent }}%</p>
-        <p class="lifegrid__stat-label">of your life has already passed</p>
+      <div class="lifegrid__emotional" :class="{ 'is-visible': showEmotional }">
+        <p class="lifegrid__emotional-big">{{ livedPercent }}%</p>
+        <p class="lifegrid__emotional-text">of your life has already passed</p>
+        <p class="lifegrid__emotional-sub">
+          That's {{ daysLived.toLocaleString() }} days, {{ hoursLived.toLocaleString() }} hours,
+          and roughly {{ heartbeats }} heartbeats.
+        </p>
       </div>
 
       <!-- Actions -->
       <div class="lifegrid__actions" :class="{ 'is-visible': showActions }">
-        <button class="btn-ghost" @click="goBack">
-          ← Back to summary
+        <button class="btn-primary" @click="goToStats" style="padding: var(--space-md) var(--space-2xl);">
+          See your life stats →
         </button>
-        <button class="summary__restart" @click="startOver">
-          Start over
-        </button>
+        <button class="btn-ghost" @click="goBack">← Back to summary</button>
+        <button class="lifegrid__restart" @click="startOver">Start over</button>
       </div>
     </div>
   </div>
@@ -75,17 +94,40 @@ const router = useRouter()
 const store = useLifeStore()
 
 const isVisible = ref(false)
-const showStat = ref(false)
+const showEmotional = ref(false)
 const showActions = ref(false)
-const revealedDots = ref(0)
+const revealedCount = ref(0)
 
-// Show a subset for performance (each dot = ~4 weeks = 1 month)
-const monthsInLife = computed(() => store.lifespan * 12)
-const displayWeeks = computed(() => monthsInLife.value)
+// ====== CORRECT MATH ======
+// Lifespan = 80 years (default from store) or store.lifespan
+// Total weeks in life = lifespan * 52 (approximate)
+const totalWeeks = computed(() => store.lifespan * 52)
+const weeksLived = computed(() => store.userAge * 52)
+const weeksRemaining = computed(() => Math.max(0, totalWeeks.value - weeksLived.value))
 
 const livedPercent = computed(() =>
   Math.round((store.userAge / store.lifespan) * 100)
 )
+
+// Additional stats — correct math
+const daysLived = computed(() => Math.round(store.userAge * 365.25))
+const hoursLived = computed(() => Math.round(daysLived.value * 24))
+const heartbeats = computed(() => {
+  // Average ~72 bpm = 72 * 60 * 24 * 365.25 = ~37,843,200 per year
+  const total = store.userAge * 72 * 60 * 24 * 365.25
+  if (total >= 1e9) return (total / 1e9).toFixed(1) + ' billion'
+  if (total >= 1e6) return (total / 1e6).toFixed(0) + ' million'
+  return total.toLocaleString()
+})
+
+// Year labels for left side (every 10 years)
+const yearLabels = computed(() => {
+  const labels: number[] = []
+  for (let y = 0; y <= store.lifespan; y += 10) {
+    labels.push(y)
+  }
+  return labels
+})
 
 onMounted(() => {
   if (store.selectedCategories.length === 0) {
@@ -95,27 +137,31 @@ onMounted(() => {
 
   setTimeout(() => { isVisible.value = true }, 200)
 
-  // Animate dots revealing
-  const totalDots = monthsInLife.value
-  const step = Math.ceil(totalDots / 60)
+  // Animate squares revealing
+  const total = totalWeeks.value
+  const step = Math.ceil(total / 80) // reveal in ~80 animation frames
   let current = 0
 
   const interval = setInterval(() => {
     current += step
-    if (current >= totalDots) {
-      revealedDots.value = totalDots
+    if (current >= total) {
+      revealedCount.value = total
       clearInterval(interval)
     } else {
-      revealedDots.value = current
+      revealedCount.value = current
     }
-  }, 30)
+  }, 25)
 
-  setTimeout(() => { showStat.value = true }, 2000)
-  setTimeout(() => { showActions.value = true }, 3000)
+  setTimeout(() => { showEmotional.value = true }, 2500)
+  setTimeout(() => { showActions.value = true }, 3500)
 })
 
 function goBack() {
   router.push('/summary')
+}
+
+function goToStats() {
+  router.push('/life-stats')
 }
 
 function startOver() {
@@ -129,21 +175,22 @@ function startOver() {
   background: var(--bg-primary);
   position: relative;
   padding: var(--space-2xl) var(--space-xl);
+  overflow-y: auto;
 }
 
 .lifegrid__bg {
   position: absolute;
   inset: 0;
   background: radial-gradient(
-    ellipse at 50% 50%,
+    ellipse at 50% 30%,
     rgba(74, 222, 128, 0.02) 0%,
-    transparent 50%
+    transparent 60%
   );
   pointer-events: none;
 }
 
 .lifegrid__content {
-  max-width: 700px;
+  max-width: 750px;
   width: 100%;
   z-index: 1;
   opacity: 0;
@@ -163,8 +210,9 @@ function startOver() {
 }
 
 .lifegrid__title {
+  font-family: 'Playfair Display', Georgia, serif;
   font-size: var(--font-size-2xl);
-  font-weight: 300;
+  font-weight: 400;
   color: var(--text-primary);
   margin-bottom: var(--space-xs);
 }
@@ -175,12 +223,45 @@ function startOver() {
   letter-spacing: 0.03em;
 }
 
+.lifegrid__subtitle strong {
+  color: var(--text-secondary);
+}
+
+/* Stats row */
+.lifegrid__stats {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2xl);
+  margin-bottom: var(--space-xl);
+}
+
+.lifegrid__stat-box {
+  text-align: center;
+}
+
+.lifegrid__stat-num {
+  font-size: var(--font-size-2xl);
+  font-weight: 300;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.lifegrid__stat-num--lived { color: var(--accent); }
+.lifegrid__stat-num--remaining { color: rgba(255, 255, 255, 0.3); }
+.lifegrid__stat-num--pct { color: #f87171; }
+
+.lifegrid__stat-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
 /* Legend */
 .lifegrid__legend {
   display: flex;
   justify-content: center;
   gap: var(--space-xl);
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-lg);
 }
 
 .lifegrid__legend-item {
@@ -191,18 +272,18 @@ function startOver() {
   color: var(--text-muted);
 }
 
-.lifegrid__legend-dot {
+.lifegrid__legend-sq {
   width: 10px;
   height: 10px;
-  border-radius: 2px;
+  border-radius: 1px;
 }
 
-.lifegrid__legend-dot--lived {
+.lifegrid__legend-sq--lived {
   background: var(--accent);
   opacity: 0.7;
 }
 
-.lifegrid__legend-dot--remaining {
+.lifegrid__legend-sq--remaining {
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -214,35 +295,52 @@ function startOver() {
   padding: var(--space-md);
   background: rgba(255, 255, 255, 0.01);
   border: 1px solid var(--border-subtle);
+  position: relative;
+  display: flex;
+  gap: 6px;
+}
+
+.lifegrid__year-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0;
+  flex-shrink: 0;
+  width: 24px;
+}
+
+.lifegrid__year-label {
+  font-size: 8px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  line-height: 1;
 }
 
 .lifegrid__grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  justify-content: center;
+  display: grid;
+  gap: 1px;
+  flex: 1;
 }
 
-.lifegrid__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 1px;
+.lifegrid__sq {
+  aspect-ratio: 1;
   background: rgba(255, 255, 255, 0.06);
+  border-radius: 0.5px;
   opacity: 0;
-  transition: opacity 0.1s, background 0.3s;
+  transition: opacity 0.08s;
 }
 
-.lifegrid__dot.is-revealed {
+.lifegrid__sq.is-revealed {
   opacity: 1;
 }
 
-.lifegrid__dot.is-lived {
+.lifegrid__sq.is-lived {
   background: var(--accent);
   opacity: 0;
 }
 
-.lifegrid__dot.is-lived.is-revealed {
-  opacity: 0.6;
+.lifegrid__sq.is-lived.is-revealed {
+  opacity: 0.65;
 }
 
 /* Markers */
@@ -256,8 +354,8 @@ function startOver() {
   padding: 0 var(--space-md);
 }
 
-/* Stat */
-.lifegrid__stat {
+/* Emotional stat */
+.lifegrid__emotional {
   text-align: center;
   margin-bottom: var(--space-2xl);
   opacity: 0;
@@ -265,22 +363,29 @@ function startOver() {
   transition: all var(--duration-slow) var(--ease-smooth);
 }
 
-.lifegrid__stat.is-visible {
+.lifegrid__emotional.is-visible {
   opacity: 1;
   transform: translateY(0);
 }
 
-.lifegrid__stat-value {
+.lifegrid__emotional-big {
   font-size: var(--font-size-4xl);
   font-weight: 200;
-  color: var(--accent);
+  color: #f87171;
   line-height: 1;
   margin-bottom: var(--space-xs);
 }
 
-.lifegrid__stat-label {
+.lifegrid__emotional-text {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.lifegrid__emotional-sub {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  line-height: 1.6;
 }
 
 /* Actions */
@@ -297,7 +402,7 @@ function startOver() {
   opacity: 1;
 }
 
-.summary__restart {
+.lifegrid__restart {
   background: none;
   border: none;
   font-family: var(--font-family);
@@ -308,22 +413,33 @@ function startOver() {
   transition: color var(--duration-fast);
 }
 
-.summary__restart:hover {
+.lifegrid__restart:hover {
   color: var(--text-secondary);
 }
 
 /* Mobile */
 @media (max-width: 480px) {
-  .lifegrid__dot {
-    width: 4px;
-    height: 4px;
+  .lifegrid__stats {
+    gap: var(--space-lg);
+  }
+
+  .lifegrid__stat-num {
+    font-size: var(--font-size-xl);
   }
 
   .lifegrid__grid-wrapper {
     padding: var(--space-sm);
   }
 
-  .lifegrid__stat-value {
+  .lifegrid__year-labels {
+    width: 18px;
+  }
+
+  .lifegrid__year-label {
+    font-size: 6px;
+  }
+
+  .lifegrid__emotional-big {
     font-size: var(--font-size-3xl);
   }
 }
